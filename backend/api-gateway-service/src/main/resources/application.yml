@@ -1,0 +1,91 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        # Customer Service Routes
+        - id: customer-auth
+          uri: ${CUSTOMER_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/v1/auth/**
+          filters:
+            - RewritePath=/api/v1/auth/(?<segment>.*), /api/v1/auth/${segment}
+        
+        - id: customer-service
+          uri: ${CUSTOMER_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/v1/customers/**
+          filters:
+            - RewritePath=/api/v1/customers/(?<segment>.*), /api/v1/customers/${segment}
+        
+        - id: address-service
+          uri: ${CUSTOMER_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/v1/addresses/**
+          filters:
+            - RewritePath=/api/v1/addresses/(?<segment>.*), /api/v1/addresses/${segment}
+        
+        # Product Service Routes
+        - id: product-service
+          uri: ${PRODUCT_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/products/**
+          filters:
+            - RewritePath=/api/v1/products/(?<segment>.*), /api/v1/products/${segment}
+        
+        - id: category-service
+          uri: ${PRODUCT_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/categories/**
+          filters:
+            - RewritePath=/api/v1/categories/(?<segment>.*), /api/v1/categories/${segment}
+        
+        # Order Service Routes
+        - id: order-service
+          uri: ${ORDER_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/orders/**
+          filters:
+            - RewritePath=/api/v1/orders/(?<segment>.*), /api/v1/orders/${segment}
+      
+      # Global CORS Configuration
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origins: "http://localhost:4200"
+            allowed-methods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowed-headers:
+              - Content-Type
+              - Authorization
+            allow-credentials: true
+            max-age: 3600
+
+# JWT Configuration (must match customer-service)
+jwt:
+  secret: ${JWT_SECRET:MySecretKeyForJWTTokenGenerationThatIsLongEnoughForHS256Algorithm}
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.ecommerce.gateway: DEBUG
+    org.springframework.cloud.gateway: DEBUG

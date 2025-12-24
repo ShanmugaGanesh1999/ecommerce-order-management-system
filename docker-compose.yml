@@ -1,0 +1,190 @@
+version: '3.8'
+
+services:
+  # MySQL Databases
+  mysql-customer:
+    image: mysql:8.0
+    container_name: mysql-customer
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: customer_db
+      MYSQL_USER: ecommerce_user
+      MYSQL_PASSWORD: ecommerce_password
+    ports:
+      - "3307:3306"
+    volumes:
+      - customer-db-data:/var/lib/mysql
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+      interval: 10s
+
+  mysql-product:
+    image: mysql:8.0
+    container_name: mysql-product
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: product_db
+      MYSQL_USER: ecommerce_user
+      MYSQL_PASSWORD: ecommerce_password
+    ports:
+      - "3308:3306"
+    volumes:
+      - product-db-data:/var/lib/mysql
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+      interval: 10s
+
+  mysql-order:
+    image: mysql:8.0
+    container_name: mysql-order
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: order_db
+      MYSQL_USER: ecommerce_user
+      MYSQL_PASSWORD: ecommerce_password
+    ports:
+      - "3309:3306"
+    volumes:
+      - order-db-data:/var/lib/mysql
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+      interval: 10s
+
+  # Backend Services
+  customer-service:
+    build:
+      context: ./backend/customer-service
+      dockerfile: Dockerfile
+    container_name: customer-service
+    environment:
+      MYSQL_HOST: mysql-customer
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: customer_db
+      MYSQL_USER: ecommerce_user
+      MYSQL_PASSWORD: ecommerce_password
+      JWT_SECRET: MySecretKeyForJWTTokenGenerationThatIsLongEnoughForHS256Algorithm
+      JWT_EXPIRATION: 86400000
+      JWT_REFRESH_EXPIRATION: 2592000000
+    ports:
+      - "8083:8083"
+    depends_on:
+      mysql-customer:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      timeout: 10s
+      retries: 5
+      interval: 10s
+
+  product-service:
+    build:
+      context: ./backend/product-service
+      dockerfile: Dockerfile
+    container_name: product-service
+    environment:
+      MYSQL_HOST: mysql-product
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: product_db
+      MYSQL_USER: ecommerce_user
+      MYSQL_PASSWORD: ecommerce_password
+    ports:
+      - "8081:8081"
+    depends_on:
+      mysql-product:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      timeout: 10s
+      retries: 5
+      interval: 10s
+
+  order-service:
+    build:
+      context: ./backend/order-service
+      dockerfile: Dockerfile
+    container_name: order-service
+    environment:
+      MYSQL_HOST: mysql-order
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: order_db
+      MYSQL_USER: ecommerce_user
+      MYSQL_PASSWORD: ecommerce_password
+      PRODUCT_SERVICE_URL: http://product-service:8081
+    ports:
+      - "8082:8082"
+    depends_on:
+      mysql-order:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      timeout: 10s
+      retries: 5
+      interval: 10s
+
+  api-gateway:
+    build:
+      context: ./backend/api-gateway-service
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    environment:
+      CUSTOMER_SERVICE_URL: http://customer-service:8083
+      PRODUCT_SERVICE_URL: http://product-service:8081
+      ORDER_SERVICE_URL: http://order-service:8082
+    ports:
+      - "8080:8080"
+    depends_on:
+      customer-service:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      timeout: 10s
+      retries: 5
+      interval: 10s
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend/ecommerce-app
+      dockerfile: Dockerfile
+    container_name: ecommerce-frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - ecommerce-network
+
+networks:
+  ecommerce-network:
+    driver: bridge
+
+volumes:
+  customer-db-data:
+  product-db-data:
+  order-db-data:
